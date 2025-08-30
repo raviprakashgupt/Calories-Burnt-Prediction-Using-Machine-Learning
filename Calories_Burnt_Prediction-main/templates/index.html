@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calories Burnt Prediction — Futuristic</title>
+  <!-- Tailwind (utility only; all design/animation is custom below) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* ================================
+       THEME TOKENS (easy to tweak)
+       ================================ */
+    :root{
+      --bg-1:#0b0f1a;           /* deep space */
+      --bg-2:#0d1b2a;           /* navy */
+      --neon:#ff6a3d;           /* burning orange */
+      --neon-2:#21e6c1;         /* teal accent */
+      --text:#eaf4f4;           /* soft white */
+      --muted:#9fb3c8;
+      --glass:rgba(255,255,255,.07);
+      --glass-stroke:rgba(255,255,255,.12);
+    }
+
+    /* ================================
+       BACKGROUND LAYERS
+       ================================ */
+    body{
+      margin:0;
+      color:var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      min-height:100vh;
+      /* animated gradient base */
+      background:
+        radial-gradient(1200px 700px at 20% 10%, rgba(255,106,61,.18), transparent 50%),
+        radial-gradient(900px 600px at 80% 15%, rgba(33,230,193,.12), transparent 45%),
+        linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      overflow:hidden;
+    }
+
+    /* animated glow spots */
+    .glow {
+      position:fixed; inset:0; pointer-events:none; z-index:-2;
+      background:
+        radial-gradient(600px 600px at 20% 80%, rgba(255,106,61,.15), transparent 60%),
+        radial-gradient(500px 500px at 80% 30%, rgba(33,230,193,.12), transparent 55%);
+      filter: blur(24px);
+      animation: glowPulse 8s ease-in-out infinite alternate;
+    }
+    @keyframes glowPulse { to { filter: blur(34px) brightness(1.06);} }
+
+    /* floating embers (canvas sits below UI) */
+    #embers {
+      position:fixed; inset:0; z-index:-3;
+    }
+
+    /* ================================
+       GLASS CARD + NEU DETAILS
+       ================================ */
+    .card{
+      background: var(--glass);
+      border:1px solid var(--glass-stroke);
+      backdrop-filter: blur(14px);
+      border-radius: 18px;
+      box-shadow:
+        0 10px 40px rgba(0,0,0,.45),
+        inset 0 0 0 1px rgba(255,255,255,.04);
+    }
+
+    .title{
+      font-weight: 900;
+      letter-spacing: .4px;
+      text-shadow: 0 0 14px rgba(255,106,61,.28);
+    }
+
+    /* heartbeat strip (top) */
+    .heartbeat-wrap{
+      position:relative;
+      height: 56px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      opacity:.9;
+    }
+    .heartbeat{
+      position:absolute;
+      left:0; top:50%; transform: translateY(-50%);
+      width: 1600px; height: 80px;
+      stroke: var(--neon);
+      filter: drop-shadow(0 0 6px rgba(255,106,61,.6));
+      animation: run 3.2s linear infinite;
+    }
+    @keyframes run { to { transform: translate(-50%, -50%);} }
+
+    /* form fields */
+    .field{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.03);
+      transition: .2s;
+    }
+    .field:focus-within{
+      box-shadow: 0 0 0 2px rgba(255,106,61,.35), 0 0 26px rgba(255,106,61,.16) inset;
+      border-color: rgba(255,106,61,.55);
+    }
+    label{ font-size:.9rem; color:var(--muted); font-weight:600; }
+    input, select{
+      width:100%; border:none; outline:none; background: transparent;
+      color:var(--text); padding: 6px 2px; font-size: .98rem;
+    }
+    input::placeholder{ color:#b9c7d3; opacity:.7; }
+
+    /* button with energy ripple */
+    .btn{
+      position:relative; overflow:hidden; border:none; cursor:pointer;
+      border-radius: 12px;
+      padding: 12px 14px; font-weight:800; letter-spacing:.3px;
+      text-transform: uppercase;
+      color:#0b0f1a;
+      background: linear-gradient(135deg, #ff7a4f, #ff6a3d 40%, #f44708 100%);
+      box-shadow: 0 12px 28px rgba(255,106,61,.28), inset 0 -2px 0 rgba(0,0,0,.18);
+      transition: transform .18s ease, filter .18s ease;
+    }
+    .btn:hover{ transform: translateY(-1px) scale(1.01); filter:brightness(1.02); }
+    .btn:active{ transform: translateY(0) scale(.99); }
+    .btn::after{
+      content:""; position:absolute; width:16px;height:16px; border-radius:50%;
+      background: rgba(255,255,255,.5); pointer-events:none; transform: scale(0);
+      animation: none;
+    }
+    .btn.ripple::after{ animation: ripple .6s ease-out; }
+    @keyframes ripple { from{ transform: scale(0); opacity:.7 } to{ transform: scale(16); opacity:0 } }
+
+    /* tiny loader ring */
+    .loader{
+      width: 42px; height: 42px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.18);
+      border-top-color: var(--neon);
+      animation: spin 1s linear infinite;
+      filter: drop-shadow(0 0 10px rgba(255,106,61,.55));
+    }
+    @keyframes spin { to{ transform: rotate(360deg);} }
+    .hidden{ display:none !important; }
+
+    /* footer hint */
+    .hint{ color:var(--muted); font-size:.9rem; }
+  </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen">
+  <!-- Background layers -->
+  <canvas id="embers"></canvas>
+  <div class="glow"></div>
+
+  <!-- Shell -->
+  <main class="w-full max-w-3xl px-5">
+    <section class="card p-6 sm:p-8">
+      <!-- Header -->
+      <header class="text-center">
+        <div class="heartbeat-wrap">
+          <!-- SVG heartbeat path (scrolling) -->
+          <svg class="heartbeat" viewBox="0 0 800 80" fill="none">
+            <path d="M 0 40 
+                     C 40 40, 60 40, 80 40 
+                     C 120 40, 120 10, 140 10 
+                     C 160 10, 160 70, 180 70
+                     L 210 40 
+                     L 240 40 
+                     L 260 15 
+                     L 280 65 
+                     L 300 40 
+                     C 340 40, 360 40, 380 40 
+                     C 420 40, 420 15, 440 15 
+                     C 460 15, 460 65, 480 65
+                     L 510 40 
+                     L 540 40 
+                     L 560 10 
+                     L 580 70 
+                     L 600 40 
+                     C 640 40, 660 40, 680 40
+                     C 720 40, 740 40, 800 40" 
+                  stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 class="title text-2xl sm:text-3xl">Calories Burnt Prediction</h1>
+        <p class="mt-1 text-sm hint">Futuristic interface • Heat particles • Micro-interactions</p>
+      </header>
+
+      <!-- Form -->
+      <form action="/predict" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6" id="calForm">
+        <!-- Left column -->
+        <div class="field">
+          <label for="Gender">Gender</label>
+          <select id="Gender" name="Gender" required>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="Age">Age</label>
+          <input id="Age" name="Age" type="number" step="1" min="1" placeholder="Years" required/>
+        </div>
+
+        <div class="field">
+          <label for="Height">Height (cm)</label>
+          <input id="Height" name="Height" type="number" step="0.1" min="50" max="250" placeholder="e.g., 170" required/>
+        </div>
+
+        <div class="field">
+          <label for="Weight">Weight (kg)</label>
+          <input id="Weight" name="Weight" type="number" step="0.1" min="10" max="400" placeholder="e.g., 65" required/>
+        </div>
+
+        <div class="field">
+          <label for="Duration">Duration (min)</label>
+          <input id="Duration" name="Duration" type="number" step="0.1" min="1" max="300" placeholder="Workout minutes" required/>
+        </div>
+
+        <div class="field">
+          <label for="Heart_Rate">Heart Rate</label>
+          <input id="Heart_Rate" name="Heart_Rate" type="number" step="0.1" min="40" max="220" placeholder="Beats per minute" required/>
+        </div>
+
+        <div class="field sm:col-span-2">
+          <label for="Body_Temp">Body Temperature (°C)</label>
+          <input id="Body_Temp" name="Body_Temp" type="number" step="0.1" min="30" max="45" placeholder="e.g., 37.0" required/>
+        </div>
+
+        <!-- Helper: live BMI (client-only; doesn’t submit) -->
+        <div class="sm:col-span-2 flex items-center justify-between gap-3">
+          <div class="text-sm hint">
+            Tip: Update height/weight to see live BMI.
+          </div>
+          <div class="text-sm">
+            <span class="hint">BMI:</span>
+            <span id="bmi" class="font-semibold text-[var(--neon)]">--</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="sm:col-span-2 flex items-center justify-end gap-3">
+          <div id="loader" class="loader hidden"></div>
+          <button id="predictBtn" type="submit" class="btn">
+            Predict
+          </button>
+        </div>
+      </form>
+
+      <!-- Footer -->
+      <p class="mt-5 text-center text-xs hint">
+        All fields are validated. Form posts to <code class="text-[var(--neon-2)]">/predict</code> for your FastAPI endpoint.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    // =============================
+    // 1) MICRO-UX: Ripple & Loader
+    // =============================
+    const btn = document.getElementById('predictBtn');
+    const loader = document.getElementById('loader');
+    const form = document.getElementById('calForm');
+
+    btn.addEventListener('click', (e) => {
+      // energy ripple
+      btn.classList.add('ripple');
+      const r = btn.getBoundingClientRect();
+      btn.style.setProperty('--x', e.clientX - r.left + 'px');
+      btn.style.setProperty('--y', e.clientY - r.top + 'px');
+      btn.style.setProperty('--d', Math.max(r.width, r.height) + 'px');
+      setTimeout(() => btn.classList.remove('ripple'), 600);
+    });
+
+    // simple UX: show a tiny loader while the request goes out
+    form.addEventListener('submit', () => {
+      loader.classList.remove('hidden');
+      // allow the form to submit normally to /predict
+      // hide the loader after a safety timeout (in case of very fast response)
+      setTimeout(() => loader.classList.add('hidden'), 4000);
+    });
+
+    // =============================
+    // 2) LIVE BMI CALC
+    // =============================
+    const heightEl = document.getElementById('Height');
+    const weightEl = document.getElementById('Weight');
+    const bmiEl = document.getElementById('bmi');
+
+    function updateBMI(){
+      const h = parseFloat(heightEl.value);
+      const w = parseFloat(weightEl.value);
+      if (h > 0 && w > 0) {
+        const bmi = w / Math.pow(h/100, 2);
+        bmiEl.textContent = bmi.toFixed(2);
+      } else {
+        bmiEl.textContent = '--';
+      }
+    }
+    ['input','change'].forEach(evt=>{
+      heightEl.addEventListener(evt, updateBMI);
+      weightEl.addEventListener(evt, updateBMI);
+    });
+
+    // =============================
+    // 3) VALIDATION: no negatives
+    // =============================
+    form.addEventListener('input', (e)=>{
+      const t = e.target;
+      const nums = ['Age','Height','Weight','Duration','Heart_Rate','Body_Temp'];
+      if(nums.includes(t.name)){
+        if(Number(t.value) < 0){
+          t.setCustomValidity('Value cannot be negative');
+        } else {
+          t.setCustomValidity('');
+        }
+      }
+    });
+
+    // ==========================================
+    // 4) AMBIENCE: Burning Ember Particle Field
+    //    (pure canvas; lightweight)
+    // ==========================================
+    const canvas = document.getElementById('embers');
+    const ctx = canvas.getContext('2d');
+
+    function sizeCanvas(){
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', sizeCanvas);
+    sizeCanvas();
+
+    // ember particle factory
+    function ember(){
+      return {
+        x: Math.random()*canvas.width,
+        y: canvas.height + Math.random()*80,
+        r: Math.random()*2 + 0.6,
+        vy: 0.6 + Math.random()*1.2,
+        drift: (Math.random()-.5)*0.6,
+        alpha: .35 + Math.random()*.5
+      };
+    }
+
+    // create pool
+    const EMBER_COUNT = 110;
+    const embers = Array.from({length:EMBER_COUNT}, ember);
+
+    function tick(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      embers.forEach(p=>{
+        // draw
+        ctx.beginPath();
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r*3);
+        g.addColorStop(0, `rgba(255,138,92,${p.alpha})`);   // hot core
+        g.addColorStop(1, `rgba(255,106,61,0)`);            // fade
+        ctx.fillStyle = g;
+        ctx.arc(p.x,p.y,p.r*3,0,Math.PI*2);
+        ctx.fill();
+
+        // motion (float up, drift sideways)
+        p.y -= p.vy;
+        p.x += p.drift * (Math.sin(p.y*0.01));
+        p.alpha *= 0.999;  // slight fade
+
+        // recycle when off-screen
+        if(p.y < -10 || p.alpha < 0.05){
+          const repl = ember();
+          repl.x = Math.random()*canvas.width;
+          repl.y = canvas.height + Math.random()*60;
+          p.x = repl.x; p.y = repl.y; p.r = repl.r; p.vy = repl.vy;
+          p.drift = repl.drift; p.alpha = repl.alpha;
+        }
+      });
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>

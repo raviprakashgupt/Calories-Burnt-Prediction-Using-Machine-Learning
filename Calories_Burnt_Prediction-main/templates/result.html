@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Prediction Result — Futuristic</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root{
+      --bg-1:#0b0f1a; --bg-2:#0d1b2a;
+      --neon:#ff6a3d; --neon-2:#21e6c1;
+      --text:#eaf4f4; --muted:#9fb3c8;
+      --glass:rgba(255,255,255,.07); --glass-stroke:rgba(255,255,255,.12);
+    }
+    body{
+      margin:0; font-family:Inter,sans-serif; color:var(--text); min-height:100vh;
+      background:
+        radial-gradient(1000px 600px at 15% 10%, rgba(255,106,61,.15), transparent 55%),
+        radial-gradient(800px 600px at 85% 20%, rgba(33,230,193,.1), transparent 50%),
+        linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      overflow-x:hidden; transition:.3s;
+    }
+    body.light{ --bg-1:#f0f4f9; --bg-2:#ffffff; --text:#1a1a1a; --muted:#444;
+      --glass:rgba(0,0,0,.05); --glass-stroke:rgba(0,0,0,.12);}
+    #embers{position:fixed;inset:0;z-index:-3;}
+    .glow{position:fixed;inset:0;z-index:-2;pointer-events:none;
+      background:radial-gradient(500px 500px at 20% 80%, rgba(255,106,61,.15), transparent 60%),
+                 radial-gradient(400px 400px at 80% 30%, rgba(33,230,193,.12), transparent 50%);
+      filter:blur(20px);animation:glowPulse 8s ease-in-out infinite alternate;}
+    @keyframes glowPulse{to{filter:blur(30px) brightness(1.05)}}
+    .card{background:var(--glass);border:1px solid var(--glass-stroke);backdrop-filter:blur(14px);
+      border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.45);}
+    .btn{padding:10px 16px;border-radius:12px;font-weight:700;letter-spacing:.3px;
+      background:linear-gradient(135deg,#ff7a4f,#ff6a3d 40%,#f44708 100%);color:#0b0f1a;
+      box-shadow:0 10px 28px rgba(255,106,61,.28);transition:transform .2s ease;}
+    .btn:hover{transform:translateY(-1px) scale(1.01);}
+    .toggle{cursor:pointer;position:absolute;top:16px;right:20px;font-size:1.2rem;}
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen relative">
+  <canvas id="embers"></canvas>
+  <div class="glow"></div>
+
+  <!-- Theme Toggle -->
+  <div class="toggle text-[var(--neon)]" onclick="toggleTheme()">🌙</div>
+
+  <main class="card p-6 sm:p-8 w-full max-w-3xl">
+    <h1 class="text-2xl font-bold text-center mb-4">Prediction Result</h1>
+
+    <!-- Calories Result -->
+    <div class="text-center mb-6">
+      <h2 class="text-lg">Calories Burnt</h2>
+      <p id="caloriesCounter" class="text-4xl font-extrabold text-[var(--neon)] mt-2">
+        0 kcal
+      </p>
+    </div>
+
+    <!-- Chart -->
+    <canvas id="resultChart" class="w-full h-64"></canvas>
+
+    <!-- History -->
+    <h3 class="mt-8 text-lg font-semibold mb-2">History</h3>
+    <ul id="historyList" class="space-y-2 text-sm max-h-40 overflow-y-auto"></ul>
+
+    <!-- Actions -->
+    <div class="mt-6 flex flex-wrap justify-center gap-4">
+      <button class="btn" onclick="downloadPDF()">Download Report</button>
+      <button class="btn" onclick="deleteHistory()">Delete History</button>
+      <button class="btn" onclick="shareResult()">Share</button>
+      <a href="/" class="btn">Go Back</a>
+    </div>
+  </main>
+
+<script>
+  // ===== Background Embers =====
+  const canvas=document.getElementById('embers'),ctx=canvas.getContext('2d');
+  function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
+  window.addEventListener('resize',resize);resize();
+  function ember(){return{x:Math.random()*canvas.width,y:canvas.height+Math.random()*80,
+    r:Math.random()*2+0.6,vy:0.6+Math.random()*1.2,alpha:.35+Math.random()*.5};}
+  const EMBER_COUNT=100,embers=Array.from({length:EMBER_COUNT},ember);
+  (function animate(){ctx.clearRect(0,0,canvas.width,canvas.height);
+    embers.forEach(p=>{ctx.beginPath();
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+      g.addColorStop(0,`rgba(255,138,92,${p.alpha})`);
+      g.addColorStop(1,`rgba(255,106,61,0)`);
+      ctx.fillStyle=g;ctx.arc(p.x,p.y,p.r*3,0,Math.PI*2);ctx.fill();
+      p.y-=p.vy;if(p.y<-10)p.y=canvas.height+60;});
+    requestAnimationFrame(animate)})();
+
+  // ===== Calories with Animated Counter =====
+  const calories=parseInt("{{ calories }}"); 
+  let counter=0; const target=calories; 
+  const interval=setInterval(()=>{
+    if(counter<target){counter+=Math.ceil(target/50);document.getElementById("caloriesCounter").textContent=counter+" kcal";}
+    else{document.getElementById("caloriesCounter").textContent=target+" kcal";clearInterval(interval);}
+  },50);
+
+  // ===== History Storage =====
+  const history=JSON.parse(localStorage.getItem('caloriesHistory')||"[]");
+  history.push({date:new Date().toLocaleString(),cal:target});
+  localStorage.setItem('caloriesHistory',JSON.stringify(history));
+
+  // ===== Chart.js =====
+  const ctxChart=document.getElementById('resultChart');
+  new Chart(ctxChart,{type:'line',data:{labels:history.map(h=>h.date),
+    datasets:[{label:'Calories Burnt',data:history.map(h=>h.cal),
+    borderColor:'#ff6a3d',backgroundColor:'rgba(255,106,61,0.3)',fill:true,tension:0.3}]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'var(--text)'}}},
+    scales:{x:{ticks:{color:'var(--muted)'}},y:{ticks:{color:'var(--muted)'}}}}});
+
+  // ===== History List =====
+  const ul=document.getElementById('historyList');
+  history.slice(-10).reverse().forEach(h=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span class="text-[var(--neon-2)]">${h.date}</span> — 
+                  <span class="font-bold">${h.cal}</span> kcal`;
+    ul.appendChild(li);
+  });
+
+  // ===== Delete History =====
+  function deleteHistory(){
+    localStorage.removeItem('caloriesHistory');
+    alert("History cleared!"); location.reload();
+  }
+
+  // ===== PDF Report =====
+  function downloadPDF(){
+    const { jsPDF } = window.jspdf; const doc=new jsPDF();
+    doc.setFontSize(18); doc.text("Calories Burnt Prediction Report",20,20);
+    doc.setFontSize(12); doc.text(`Prediction: ${target} kcal`,20,40);
+    doc.text("History:",20,60);
+    history.forEach((h,i)=>doc.text(`${i+1}. ${h.date} — ${h.cal} kcal`,25,75+i*10));
+    doc.save("Calories_Report.pdf");
+  }
+
+  // ===== Share Option =====
+  function shareResult(){
+    const text=`🔥 Calories Burnt Prediction 🔥\nResult: ${target} kcal\nDate: ${new Date().toLocaleString()}`;
+    const urlWhatsApp=`https://wa.me/?text=${encodeURIComponent(text)}`;
+    const urlEmail=`mailto:?subject=Calories Burnt Prediction&body=${encodeURIComponent(text)}`;
+    if(confirm("Share on WhatsApp?")) window.open(urlWhatsApp,"_blank");
+    else window.open(urlEmail,"_blank");
+  }
+
+  // ===== Dark/Light Theme =====
+  function toggleTheme(){
+    document.body.classList.toggle('light');
+  }
+</script>
+</body>
+</html>
